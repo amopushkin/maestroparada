@@ -1,6 +1,6 @@
 [build]
-  command = "npm run build"   # spustí náš 'fake' build, aby Netlify bežal build krok
-  publish = "."               # koreň repozitára
+  command = "npm run build"
+  publish = "."
   functions = "netlify/functions"
 
 [functions]
