@@ -1,212 +1,241 @@
+<!doctype html>
+<html lang="sk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin – Maestro Parada</title>
+  <style>
+    :root{
+      --bg:#f7f7fb;--card:#fff;--text:#111827;--muted:#6b7280;--border:#e5e7eb;
+      --primary:#2563eb;--ghost:#eef2ff;--accent:#1e40af;--danger:#dc2626;--info:#0ea5e9
+    }
+    *{box-sizing:border-box}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:var(--bg);color:var(--text);padding:24px}
+    .wrap{max-width:950px;margin:0 auto}
+    .card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px;margin:14px 0;box-shadow:0 8px 24px rgba(0,0,0,.06)}
+    h1{margin:0 0 12px}
+    h2{margin:0 0 10px}
+    label{font-weight:600;display:block;margin:8px 0 6px}
+    input,select{padding:8px 10px;border:1px solid var(--border);border-radius:8px}
+    table{width:100%;border-collapse:collapse;margin-top:10px}
+    th,td{border:1px solid var(--border);padding:8px;text-align:left}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+    .btn{background:var(--primary);color:#fff;border:none;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
+    .ghost{background:var(--ghost);color:var(--accent)}
+    .danger{background:var(--danger)}
+    .info{background:var(--info)}
+    .muted{color:var(--muted)}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Admin – Maestro Parada</h1>
+
+  <!-- Prihlásenie -->
+  <div id="loginCard" class="card">
+    <label for="pwd">Heslo</label>
+    <input id="pwd" type="password" placeholder="••••••••" />
+    <button class="btn" id="loginBtn">Prihlásiť</button>
+    <div id="loginMsg" style="color:#dc2626;margin-top:6px;"></div>
+  </div>
+
+  <!-- Aplikácia -->
+  <div id="app" style="display:none">
+    <div class="card">
+      <button id="loadBtn" class="btn ghost">Načítať aktuálne dáta</button>
+      <button id="saveAllBtn" class="btn">Uložiť všetky zmeny</button>
+      <button id="exportAllBtn" class="btn info" style="margin-left:8px;">Export všetko (JSON)</button>
+      <button id="exportAllCsvBtn" class="btn info" style="margin-left:8px;">Export všetko (CSV)</button>
+      <span id="status" class="muted" style="margin-left:10px;"></span>
+    </div>
+
+    <div class="card">
+      <h2>Rezervácie</h2>
+      <div class="row">
+        <div><label>Od</label><input id="rFrom" type="date"></div>
+        <div><label>Do</label><input id="rTo" type="date"></div>
+        <div><button id="addR" class="btn">Pridať</button></div>
+        <div>
+          <label>Import rezervácií (JSON)</label>
+          <input id="impR" type="file" accept="application/json">
+        </div>
+        <div><button id="exportR" class="btn info">Export (JSON)</button></div>
+        <div><button id="exportRCsv" class="btn info">Export (CSV)</button></div>
+      </div>
+      <table id="tblR"><thead><tr><th>Od</th><th>Do</th><th></th></tr></thead><tbody></tbody></table>
+    </div>
+
+    <div class="card">
+      <h2>Cenník</h2>
+      <div class="row">
+        <div><label>Od</label><input id="pFrom" type="date"></div>
+        <div><label>Do</label><input id="pTo" type="date"></div>
+        <div><label>Cena / noc (EUR)</label><input id="pPrice" type="number" step="1" min="0" value="100"></div>
+        <div><label>Elektrina</label>
+          <select id="pElec"><option value="false">Nie</option><option value="true">Áno</option></select>
+        </div>
+        <div><button id="addP" class="btn">Pridať</button></div>
+        <div>
+          <label>Import cenníka (JSON)</label>
+          <input id="impP" type="file" accept="application/json">
+        </div>
+        <div><button id="exportP" class="btn info">Export (JSON)</button></div>
+        <div><button id="exportPCsv" class="btn info">Export (CSV)</button></div>
+      </div>
+      <table id="tblP"><thead><tr><th>Od</th><th>Do</th><th>Cena</th><th>Elektrina</th><th></th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+</div>
+
 <script>
-/* ====== Konfigurácia API ====== */
-const API_GET  = '/.netlify/functions/get-data';
-const API_SAVE = '/.netlify/functions/admin-save';
+window.addEventListener('DOMContentLoaded', () => {
+  /* ====== API ====== */
+  const API_GET  = '/.netlify/functions/get-data';
+  const API_SAVE = '/.netlify/functions/admin-save';
 
-/* ====== Stav ====== */
-let TOKEN = '';
-let R = []; // rezervácie
-let P = []; // cenník
+  /* ====== Stav ====== */
+  let TOKEN = '';
+  let R = []; // rezervácie
+  let P = []; // cenník
 
-/* ====== Pomocné – dátumy a zoradenie ====== */
-function dnum(iso) {
-  const t = new Date(iso);
-  t.setHours(0,0,0,0);
-  return t.getTime();
-}
-function sortRezervacie(Rarr) {
-  Rarr.sort((a,b) => {
-    const af = dnum(a.from), bf = dnum(b.from);
-    if (af !== bf) return af - bf;
-    return dnum(a.to) - dnum(b.to);
-  });
-}
-function sortCennik(Parr) {
-  Parr.sort((a,b) => {
-    const af = dnum(a.from), bf = dnum(b.from);
-    if (af !== bf) return af - bf;
-    return dnum(a.to) - dnum(b.to);
-  });
-}
+  /* ====== Pomocné – dátumy a zoradenie ====== */
+  const dnum = (iso) => { const t=new Date(iso); t.setHours(0,0,0,0); return t.getTime(); };
+  const sortRezervacie = (arr) => arr.sort((a,b)=> (dnum(a.from)-dnum(b.from)) || (dnum(a.to)-dnum(b.to)));
+  const sortCennik     = (arr) => arr.sort((a,b)=> (dnum(a.from)-dnum(b.from)) || (dnum(a.to)-dnum(b.to)));
 
-/* ====== Export helpery (JSON/CSV zo SERVERA) ====== */
-function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-function downloadJSON(data, fname) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = fname;
-  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-}
-function toCsv(rows, headers) {
-  const sep = ';';
-  const esc = (v) => {
-    const s = (v === null || v === undefined) ? '' : String(v);
-    return `"${s.replace(/"/g, '""')}"`;
+  /* ====== Export helpery (JSON/CSV zo SERVERA) ====== */
+  const todayStr = ()=>{ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+  const downloadJSON = (data, fname)=>{
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=fname;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   };
-  const head = headers.map(esc).join(sep);
-  const body = rows.map(r => headers.map(h => esc(r[h])).join(sep)).join('\r\n');
-  return head + '\r\n' + body + '\r\n';
-}
-function downloadCSV(csvText, filename) {
-  const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-}
+  const toCsv = (rows, headers)=>{
+    const sep=';'; const esc=(v)=>`"${String(v??'').replace(/"/g,'""')}"`;
+    const head=headers.map(esc).join(sep);
+    const body=rows.map(r=>headers.map(h=>esc(r[h])).join(sep)).join('\r\n');
+    return head+'\r\n'+body+'\r\n';
+  };
+  const downloadCSV = (csvText, fname)=>{
+    const blob=new Blob([csvText],{type:'text/csv;charset=utf-8'});
+    const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=fname;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  };
 
-/* ====== Exporty zo SERVERA ====== */
-// JSON
-async function exportRezervacieServer(){
-  const d = await fetch(API_GET + '?kind=rezervacie').then(r=>r.json()).catch(()=>[]);
-  downloadJSON(Array.isArray(d)?d:[], `rezervacie-${todayStr()}.json`);
-}
-async function exportCennikServer(){
-  const d = await fetch(API_GET + '?kind=cennik').then(r=>r.json()).catch(()=>[]);
-  downloadJSON(Array.isArray(d)?d:[], `cennik-${todayStr()}.json`);
-}
-// CSV
-async function exportRezervacieCsvServer(){
-  const rows = await fetch(API_GET + '?kind=rezervacie').then(r=>r.json()).catch(()=>[]);
-  const csv = toCsv(Array.isArray(rows)?rows:[], ['from','to']);
-  downloadCSV(csv, `rezervacie-${todayStr()}.csv`);
-}
-async function exportCennikCsvServer(){
-  const rows = await fetch(API_GET + '?kind=cennik').then(r=>r.json()).catch(()=>[]);
-  const csv = toCsv(Array.isArray(rows)?rows:[], ['from','to','price','electricity']);
-  downloadCSV(csv, `cennik-${todayStr()}.csv`);
-}
+  // Exporty zo SERVERA
+  const exportRezervacieServer   = async()=> downloadJSON(await fetch(API_GET+'?kind=rezervacie').then(r=>r.json()).catch(()=>[]), `rezervacie-${todayStr()}.json`);
+  const exportCennikServer       = async()=> downloadJSON(await fetch(API_GET+'?kind=cennik').then(r=>r.json()).catch(()=>[]), `cennik-${todayStr()}.json`);
+  const exportRezervacieCsvServer= async()=> { const rows=await fetch(API_GET+'?kind=rezervacie').then(r=>r.json()).catch(()=>[]); downloadCSV(toCsv(Array.isArray(rows)?rows:[], ['from','to']), `rezervacie-${todayStr()}.csv`); };
+  const exportCennikCsvServer    = async()=> { const rows=await fetch(API_GET+'?kind=cennik').then(r=>r.json()).catch(()=>[]); downloadCSV(toCsv(Array.isArray(rows)?rows:[], ['from','to','price','electricity']), `cennik-${todayStr()}.csv`); };
 
-/* ====== Login ====== */
-document.getElementById('loginBtn').onclick = () => {
-  TOKEN = document.getElementById('pwd').value.trim();
-  document.getElementById('loginCard').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
-  loadAll();
-};
+  /* ====== Hooky na UI prvky (po DOMContentLoaded už existujú) ====== */
+  const $ = (id)=>document.getElementById(id);
+  const loginCard = $('loginCard');
+  const app       = $('app');
+  const statusEl  = $('status');
 
-/* ====== Načítanie a uloženie ====== */
-async function loadAll() {
-  const s = document.getElementById('status'); s.textContent = 'Načítavam…';
-  const [rez, cen] = await Promise.all([
-    fetch(API_GET + '?kind=rezervacie').then(r=>r.json()).catch(()=>[]),
-    fetch(API_GET + '?kind=cennik').then(r=>r.json()).catch(()=>[]),
-  ]);
-  R = Array.isArray(rez)?rez:[];
-  P = Array.isArray(cen)?cen:[];
-
-  // ✅ automatické zoradenie po načítaní
-  sortRezervacie(R);
-  sortCennik(P);
-
-  renderTables();
-  s.textContent = 'Načítané.';
-}
-document.getElementById('loadBtn').onclick = loadAll;
-
-document.getElementById('saveAllBtn').onclick = async () => {
-  const s = document.getElementById('status'); s.textContent = 'Ukladám…';
-
-  // ✅ pre istotu zoradiť aj tesne pred uložením
-  sortRezervacie(R);
-  sortCennik(P);
-
-  const h = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN };
-  const r1 = await fetch(API_SAVE, { method:'POST', headers:h, body: JSON.stringify({ kind:'rezervacie', data:R }) });
-  if (!r1.ok) { s.textContent = 'Chyba ukladania rezervácií.'; return; }
-  const r2 = await fetch(API_SAVE, { method:'POST', headers:h, body: JSON.stringify({ kind:'cennik', data:P }) });
-  if (!r2.ok) { s.textContent = 'Chyba ukladania cenníka.'; return; }
-  s.textContent = 'Uložené.';
-};
-
-/* ====== Handlery export tlačidiel ====== */
-document.getElementById('exportR').onclick = exportRezervacieServer;
-document.getElementById('exportP').onclick = exportCennikServer;
-document.getElementById('exportRCsv').onclick = exportRezervacieCsvServer;
-document.getElementById('exportPCsv').onclick = exportCennikCsvServer;
-document.getElementById('exportAllBtn').onclick = async () => { await exportRezervacieServer(); await exportCennikServer(); };
-document.getElementById('exportAllCsvBtn').onclick = async () => { await exportRezervacieCsvServer(); await exportCennikCsvServer(); };
-
-/* ====== Render tabuliek ====== */
-function renderTables() {
-  const tbR = document.querySelector('#tblR tbody'); tbR.innerHTML = '';
-  R.forEach((it, idx) => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${it.from}</td><td>${it.to}</td>
-      <td><button class="btn danger" data-i="${idx}" data-t="r">Vymazať</button></td>`;
-    tbR.appendChild(tr);
+  $('loginBtn')?.addEventListener('click', ()=>{
+    TOKEN = $('pwd')?.value?.trim() ?? '';
+    loginCard.style.display = 'none';
+    app.style.display = 'block';
+    loadAll();
   });
 
-  const tbP = document.querySelector('#tblP tbody'); tbP.innerHTML = '';
-  P.forEach((it, idx) => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${it.from}</td><td>${it.to}</td>
-      <td>${it.price}</td><td>${it.electricity ? 'Áno' : 'Nie'}</td>
-      <td><button class="btn danger" data-i="${idx}" data-t="p">Vymazať</button></td>`;
-    tbP.appendChild(tr);
+  $('loadBtn')?.addEventListener('click', loadAll);
+  $('saveAllBtn')?.addEventListener('click', async ()=>{
+    statusEl.textContent = 'Ukladám…';
+    // zoradenie pred uložením
+    sortRezervacie(R);
+    sortCennik(P);
+    const h={'Content-Type':'application/json','Authorization':'Bearer '+TOKEN};
+    const r1=await fetch(API_SAVE,{method:'POST',headers:h,body:JSON.stringify({kind:'rezervacie',data:R})});
+    if(!r1.ok){ statusEl.textContent='Chyba ukladania rezervácií.'; return; }
+    const r2=await fetch(API_SAVE,{method:'POST',headers=h,body:JSON.stringify({kind:'cennik',data:P})});
+    if(!r2.ok){ statusEl.textContent='Chyba ukladania cenníka.'; return; }
+    statusEl.textContent='Uložené.';
   });
 
-  document.querySelectorAll('button[data-t="r"]').forEach(b => b.onclick = () => { R.splice(+b.dataset.i,1); renderTables(); });
-  document.querySelectorAll('button[data-t="p"]').forEach(b => b.onclick = () => { P.splice(+b.dataset.i,1); renderTables(); });
-}
+  // Export tlačidlá
+  $('exportR')?.addEventListener('click', exportRezervacieServer);
+  $('exportP')?.addEventListener('click', exportCennikServer);
+  $('exportRCsv')?.addEventListener('click', exportRezervacieCsvServer);
+  $('exportPCsv')?.addEventListener('click', exportCennikCsvServer);
+  $('exportAllBtn')?.addEventListener('click', async()=>{ await exportRezervacieServer(); await exportCennikServer(); });
+  $('exportAllCsvBtn')?.addEventListener('click', async()=>{ await exportRezervacieCsvServer(); await exportCennikCsvServer(); });
 
-/* ====== Pridávanie a import ====== */
-document.getElementById('addR').onclick = () => {
-  const f = document.getElementById('rFrom').value, t = document.getElementById('rTo').value;
-  if (!f || !t) return alert('Vyplň dátumy.');
-  R.push({ from:f, to:t });
-
-  // ✅ zoradiť po pridaní
-  sortRezervacie(R);
-
-  renderTables();
-};
-
-document.getElementById('addP').onclick = () => {
-  const f = document.getElementById('pFrom').value, t = document.getElementById('pTo').value;
-  const price = Number(document.getElementById('pPrice').value || 0);
-  const elec = document.getElementById('pElec').value === 'true';
-  if (!f || !t) return alert('Vyplň dátumy.');
-  P.push({ from:f, to:t, price, electricity: elec });
-
-  // ✅ zoradiť po pridaní
-  sortCennik(P);
-
-  renderTables();
-};
-
-document.getElementById('impR').onchange = (e) =>
-  readJsonFile(e.target.files[0]).then(v => {
-    if(Array.isArray(v)) {
-      R = v;
-
-      // ✅ zoradiť po importe
-      sortRezervacie(R);
-
-      renderTables();
-    } else alert('Súbor rezervácií musí byť JSON pole.');
+  // Pridávanie riadkov
+  $('addR')?.addEventListener('click', ()=>{
+    const f=$('rFrom')?.value, t=$('rTo')?.value;
+    if(!f||!t) return alert('Vyplň dátumy.');
+    R.push({from:f,to:t}); sortRezervacie(R); renderTables();
+  });
+  $('addP')?.addEventListener('click', ()=>{
+    const f=$('pFrom')?.value, t=$('pTo')?.value;
+    const price=Number($('pPrice')?.value||0);
+    const elec = ($('pElec')?.value==='true');
+    if(!f||!t) return alert('Vyplň dátumy.');
+    P.push({from:f,to:t,price, electricity:elec}); sortCennik(P); renderTables();
   });
 
-document.getElementById('impP').onchange = (e) =>
-  readJsonFile(e.target.files[0]).then(v => {
-    if(Array.isArray(v)) {
-      P = v;
-
-      // ✅ zoradiť po importe
-      sortCennik(P);
-
-      renderTables();
-    } else alert('Súbor cenníka musí byť JSON pole.');
+  // Importy
+  $('impR')?.addEventListener('change',(e)=>{
+    const file=e.target.files?.[0]; if(!file) return;
+    readJsonFile(file).then(v=>{ if(Array.isArray(v)){ R=v; sortRezervacie(R); renderTables(); } else alert('Súbor rezervácií musí byť JSON pole.'); });
+  });
+  $('impP')?.addEventListener('change',(e)=>{
+    const file=e.target.files?.[0]; if(!file) return;
+    readJsonFile(file).then(v=>{ if(Array.isArray(v)){ P=v; sortCennik(P); renderTables(); } else alert('Súbor cenníka musí byť JSON pole.'); });
   });
 
-function readJsonFile(file) {
-  return new Promise((res, rej) => {
-    const fr = new FileReader();
-    fr.onload = () => { try { res(JSON.parse(fr.result)); } catch(e){ rej(e); } };
-    fr.onerror = rej;
-    fr.readAsText(file);
-  });
-}
+  // Načítanie
+  async function loadAll(){
+    statusEl.textContent='Načítavam…';
+    const [rez, cen] = await Promise.all([
+      fetch(API_GET+'?kind=rezervacie').then(r=>r.json()).catch(()=>[]),
+      fetch(API_GET+'?kind=cennik').then(r=>r.json()).catch(()=>[]),
+    ]);
+    R = Array.isArray(rez)?rez:[];  sortRezervacie(R);
+    P = Array.isArray(cen)?cen:[];  sortCennik(P);
+    renderTables();
+    statusEl.textContent='Načítané.';
+  }
+
+  // Render tabuliek
+  function renderTables(){
+    const tbR = $('tblR')?.querySelector('tbody'); if(tbR){ tbR.innerHTML='';
+      R.forEach((it, idx)=>{
+        const tr=document.createElement('tr');
+        tr.innerHTML = `<td>${it.from}</td><td>${it.to}</td>
+          <td><button class="btn danger" data-i="${idx}" data-t="r">Vymazať</button></td>`;
+        tbR.appendChild(tr);
+      });
+    }
+    const tbP = $('tblP')?.querySelector('tbody'); if(tbP){ tbP.innerHTML='';
+      P.forEach((it, idx)=>{
+        const tr=document.createElement('tr');
+        tr.innerHTML = `<td>${it.from}</td><td>${it.to}</td>
+          <td>${it.price}</td><td>${it.electricity?'Áno':'Nie'}</td>
+          <td><button class="btn danger" data-i="${idx}" data-t="p">Vymazať</button></td>`;
+        tbP.appendChild(tr);
+      });
+    }
+    // mazanie riadkov
+    document.querySelectorAll('button[data-t="r"]').forEach(b=>{
+      b.addEventListener('click', ()=>{ R.splice(Number(b.dataset.i),1); renderTables(); });
+    });
+    document.querySelectorAll('button[data-t="p"]').forEach(b=>{
+      b.addEventListener('click', ()=>{ P.splice(Number(b.dataset.i),1); renderTables(); });
+    });
+  }
+
+  function readJsonFile(file){
+    return new Promise((res, rej)=>{
+      const fr=new FileReader();
+      fr.onload=()=>{ try{ res(JSON.parse(fr.result)); }catch(e){ rej(e); } };
+      fr.onerror=rej; fr.readAsText(file);
+    });
+  }
+});
 </script>
+</body>
+</html>
