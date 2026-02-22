@@ -44,8 +44,9 @@
     <div class="card">
       <button id="loadBtn" class="btn ghost">Načítať aktuálne dáta</button>
       <button id="saveAllBtn" class="btn">Uložiť všetky zmeny</button>
-      <!-- Export všetko (zo servera) -->
+      <!-- Export všetko (JSON + CSV, zo servera) -->
       <button id="exportAllBtn" class="btn info" style="margin-left:8px;">Export všetko (JSON)</button>
+      <button id="exportAllCsvBtn" class="btn info" style="margin-left:8px;">Export všetko (CSV)</button>
       <span id="status" style="margin-left:10px;color:#6b7280;"></span>
     </div>
 
@@ -59,8 +60,9 @@
           <label>Import rezervácií (JSON)</label>
           <input id="impR" type="file" accept="application/json">
         </div>
-        <!-- Export rezervácií (zo servera) -->
+        <!-- Exporty zo servera -->
         <div><button id="exportR" class="btn info">Export (JSON)</button></div>
+        <div><button id="exportRCsv" class="btn info">Export (CSV)</button></div>
       </div>
       <table id="tblR"><thead><tr><th>Od</th><th>Do</th><th></th></tr></thead><tbody></tbody></table>
     </div>
@@ -79,8 +81,9 @@
           <label>Import cenníka (JSON)</label>
           <input id="impP" type="file" accept="application/json">
         </div>
-        <!-- Export cenníka (zo servera) -->
+        <!-- Exporty zo servera -->
         <div><button id="exportP" class="btn info">Export (JSON)</button></div>
+        <div><button id="exportPCsv" class="btn info">Export (CSV)</button></div>
       </div>
       <table id="tblP"><thead><tr><th>Od</th><th>Do</th><th>Cena</th><th>Elektrina</th><th></th></tr></thead><tbody></tbody></table>
     </div>
@@ -92,12 +95,12 @@
 const API_GET  = '/.netlify/functions/get-data';
 const API_SAVE = '/.netlify/functions/admin-save';
 
-/* ====== Stavové premenné ====== */
+/* ====== Stav ====== */
 let TOKEN = '';
-let R = [];  // rezervácie
-let P = [];  // cenník
+let R = []; // rezervácie
+let P = []; // cenník
 
-/* ====== Pomocné funkcie – export JSON (ZO SERVERA) ====== */
+/* ====== Export helpery ====== */
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -108,19 +111,48 @@ function downloadJSON(data, fname) {
   const a = document.createElement('a'); a.href = url; a.download = fname;
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
+function toCsv(rows, headers) {
+  const sep = ';';
+  const esc = (v) => {
+    const s = (v === null || v === undefined) ? '' : String(v);
+    return `"${s.replace(/"/g, '""')}"`;
+  };
+  const head = headers.map(esc).join(sep);
+  const body = rows.map(r => headers.map(h => esc(r[h])).join(sep)).join('\r\n');
+  return head + '\r\n' + body + '\r\n';
+}
+function downloadCSV(csvText, filename) {
+  const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
 
+/* ====== Exporty zo SERVERA ====== */
+// JSON
 async function exportRezervacieServer(){
-  const data = await fetch(API_GET + '?kind=rezervacie').then(r => r.json()).catch(() => []);
-  downloadJSON(Array.isArray(data) ? data : [], `rezervacie-${todayStr()}.json`);
+  const d = await fetch(API_GET + '?kind=rezervacie').then(r=>r.json()).catch(()=>[]);
+  downloadJSON(Array.isArray(d)?d:[], `rezervacie-${todayStr()}.json`);
 }
 async function exportCennikServer(){
-  const data = await fetch(API_GET + '?kind=cennik').then(r => r.json()).catch(() => []);
-  downloadJSON(Array.isArray(data) ? data : [], `cennik-${todayStr()}.json`);
+  const d = await fetch(API_GET + '?kind=cennik').then(r=>r.json()).catch(()=>[]);
+  downloadJSON(Array.isArray(d)?d:[], `cennik-${todayStr()}.json`);
+}
+// CSV
+async function exportRezervacieCsvServer(){
+  const rows = await fetch(API_GET + '?kind=rezervacie').then(r=>r.json()).catch(()=>[]);
+  const csv = toCsv(Array.isArray(rows)?rows:[], ['from','to']);
+  downloadCSV(csv, `rezervacie-${todayStr()}.csv`);
+}
+async function exportCennikCsvServer(){
+  const rows = await fetch(API_GET + '?kind=cennik').then(r=>r.json()).catch(()=>[]);
+  const csv = toCsv(Array.isArray(rows)?rows:[], ['from','to','price','electricity']);
+  downloadCSV(csv, `cennik-${todayStr()}.csv`);
 }
 
 /* ====== Login ====== */
 document.getElementById('loginBtn').onclick = () => {
-  TOKEN = document.getElementById('pwd').value.trim(); // ADMIN_PASSWORD v env (Bratislava83)
+  TOKEN = document.getElementById('pwd').value.trim();
   document.getElementById('loginCard').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   loadAll();
@@ -130,11 +162,11 @@ document.getElementById('loginBtn').onclick = () => {
 async function loadAll() {
   const s = document.getElementById('status'); s.textContent = 'Načítavam…';
   const [rez, cen] = await Promise.all([
-    fetch(API_GET + '?kind=rezervacie').then(r => r.json()).catch(() => []),
-    fetch(API_GET + '?kind=cennik').then(r => r.json()).catch(() => []),
+    fetch(API_GET + '?kind=rezervacie').then(r=>r.json()).catch(()=>[]),
+    fetch(API_GET + '?kind=cennik').then(r=>r.json()).catch(()=>[]),
   ]);
-  R = Array.isArray(rez) ? rez : [];
-  P = Array.isArray(cen) ? cen : [];
+  R = Array.isArray(rez)?rez:[];
+  P = Array.isArray(cen)?cen:[];
   renderTables();
   s.textContent = 'Načítané.';
 }
@@ -150,15 +182,15 @@ document.getElementById('saveAllBtn').onclick = async () => {
   s.textContent = 'Uložené.';
 };
 
-/* ====== Handlery EXPORT tlačidiel (ZO SERVERA) ====== */
+/* ====== Handlery export tlačidiel ====== */
 document.getElementById('exportR').onclick = exportRezervacieServer;
 document.getElementById('exportP').onclick = exportCennikServer;
-document.getElementById('exportAllBtn').onclick = async () => {
-  await exportRezervacieServer();
-  await exportCennikServer();
-};
+document.getElementById('exportRCsv').onclick = exportRezervacieCsvServer;
+document.getElementById('exportPCsv').onclick = exportCennikCsvServer;
+document.getElementById('exportAllBtn').onclick = async () => { await exportRezervacieServer(); await exportCennikServer(); };
+document.getElementById('exportAllCsvBtn').onclick = async () => { await exportRezervacieCsvServer(); await exportCennikCsvServer(); };
 
-/* ====== Render tabuliek ====== */
+/* ====== Render tabuliek, pridávanie, import ====== */
 function renderTables() {
   const tbR = document.querySelector('#tblR tbody'); tbR.innerHTML = '';
   R.forEach((it, idx) => {
@@ -181,7 +213,6 @@ function renderTables() {
   document.querySelectorAll('button[data-t="p"]').forEach(b => b.onclick = () => { P.splice(+b.dataset.i,1); renderTables(); });
 }
 
-/* ====== Pridávanie a import ====== */
 document.getElementById('addR').onclick = () => {
   const f = document.getElementById('rFrom').value, t = document.getElementById('rTo').value;
   if (!f || !t) return alert('Vyplň dátumy.');
