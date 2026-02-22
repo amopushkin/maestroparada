@@ -1,8 +1,11 @@
 {
   "name": "maestroparada",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "scripts": {
     "build": "echo \"Netlify build step running\""
+  },
+  "dependencies": {
+    "@netlify/blobs": "^5.0.0"
   }
 }
