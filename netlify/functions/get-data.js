@@ -7,15 +7,14 @@ export async function handler(event) {
       return { statusCode: 400, body: "Missing or invalid ?kind=cennik|rezervacie" };
     }
 
-    // manuálna konfigurácia Blobs cez env premenné (už overené env-checkom)
     const siteID = process.env.NETLIFY_SITE_ID;
     const token  = process.env.NETLIFY_BLOBS_TOKEN;
-
-    // ✨ kľúčová zmena: getStore s JEDNÝM objektom (name, siteID, token)
-    const store = getStore({ name: "kv", siteID, token });
+    const store  = getStore({ name: "kv", siteID, token });
 
     const key = kind === "cennik" ? "prices" : "booked";
-    const data = (await store.get(key, { type: "json" })) || [];
+
+    // ✨ priamo čítanie JSON
+    const data = (await store.getJSON(key)) ?? [];
 
     return {
       statusCode: 200,
