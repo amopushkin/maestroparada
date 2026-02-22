@@ -7,7 +7,16 @@ export async function handler(event) {
       return { statusCode: 400, body: "Missing or invalid ?kind=cennik|rezervacie" };
     }
 
-    const store = getStore("kv");
+    // manuálna konfigurácia Blobs cez env premenné
+    const options = {};
+    const siteID = process.env.NETLIFY_SITE_ID;
+    const token  = process.env.NETLIFY_BLOBS_TOKEN;
+    if (siteID && token) {
+      options.siteID = siteID;
+      options.token  = token;
+    }
+
+    const store = getStore("kv", options); // názov store: "kv"
     const key = kind === "cennik" ? "prices" : "booked";
     const data = (await store.get(key, { type: "json" })) || [];
 
