@@ -1,6 +1,6 @@
 [build]
-  command = "echo 'Netlify build triggered'"
-  publish = "/"
+  command = "npm run build"   # spustí náš 'fake' build, aby Netlify bežal build krok
+  publish = "."               # koreň repozitára
   functions = "netlify/functions"
 
 [functions]
