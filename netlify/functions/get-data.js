@@ -13,8 +13,24 @@ export async function handler(event) {
 
     const key = kind === "cennik" ? "prices" : "booked";
 
-    // ✨ priamo čítanie JSON
-    const data = (await store.getJSON(key)) ?? [];
+    // ✅ Tolerantné čítanie – ak je v Blobs „starý“ reťazec, vrátime prázdne pole
+    let data = [];
+    try {
+      const value = await store.get(key, { type: "text" });   // prečítaj surový text
+      if (!value) {
+        data = [];
+      } else {
+        try {
+          const parsed = JSON.parse(value);
+          data = Array.isArray(parsed) ? parsed : [];
+        } catch {
+          // ak je to starý "[object Object]" alebo neplatný JSON → nech je radšej []
+          data = [];
+        }
+      }
+    } catch {
+      data = [];
+    }
 
     return {
       statusCode: 200,
@@ -22,6 +38,11 @@ export async function handler(event) {
       body: JSON.stringify(data),
     };
   } catch (err) {
-    return { statusCode: 500, body: `get-data error: ${err.message}` };
+    // aj v úplnom emergency aspoň vráť JSON ([]), nie text
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "application/json" },
+      body: "[]"
+    };
   }
 }
