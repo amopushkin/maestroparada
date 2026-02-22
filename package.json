@@ -1,5 +1,8 @@
 {
   "name": "maestroparada",
-  "version": "1.0.1",
-  "private": true
+  "version": "1.0.3",
+  "private": true,
+  "scripts": {
+    "build": "echo \"Netlify build step running\""
+  }
 }
