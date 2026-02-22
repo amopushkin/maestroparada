@@ -1,0 +1,247 @@
+
+<!doctype html>
+<html lang="sk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Rezervácia – Apartment Maestro Parada</title>
+  <meta name="description" content="Kalendár obsadenosti, ceny a dopyt na ubytovanie v Apartment Maestro Parada." />
+  <style>
+    :root{--bg:#f7f7fb;--card:#fff;--text:#111827;--muted:#6b7280;--border:#e5e7eb;--primary:#2563eb;--ghost:#eef2ff;--accent:#1e40af;--danger:#dc2626}
+    *{box-sizing:border-box}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:var(--bg);color:var(--text);padding:20px}
+    .wrap{max-width:900px;margin:0 auto}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;box-shadow:0 8px 24px rgba(0,0,0,.06);margin-bottom:16px}
+    h1{margin:0 0 6px}
+    .muted{color:var(--muted)}
+    label{display:block;font-weight:600;margin-bottom:6px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    @media (max-width:720px){.grid{grid-template-columns:1fr}}
+    input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px}
+    textarea{min-height:90px;resize:vertical}
+    .btn{background:var(--primary);color:#fff;border:none;border-radius:10px;padding:12px 16px;font-weight:700;cursor:pointer}
+    .ghost{background:var(--ghost);color:var(--accent)}
+    .cal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+    .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+    .cal-dow{text-align:center;color:var(--muted);font-size:.9rem}
+    .cal-cell{border:1px solid var(--border);border-radius:8px;padding:6px;min-height:46px;background:#fff;text-align:center;user-select:none}
+    .cal-cell.disabled{opacity:.45;background:#f9fafb;pointer-events:none}
+    .cal-cell.booked{background:#fee2e2;border-color:#fecaca;color:#7f1d1d;pointer-events:none}
+    .cal-cell.selectable{cursor:pointer}
+    .cal-cell.selected{outline:2px solid var(--primary);background:#dbeafe}
+    .cal-cell .d-num{font-weight:600}
+    .cal-cell .d-price{font-size:.78rem;color:var(--muted);margin-top:4px}
+    .err{color:var(--danger);font-size:.92rem}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Rezervácia – Apartment Maestro Parada</h1>
+      <div class="muted">3 spálne · 2 kúpeľne · kapacita 6 + 2</div>
+    </div>
+
+    <!-- Kalendár -->
+    <div class="card">
+      <div class="cal-head">
+        <div id="calTitle">Kalendár obsadenosti</div>
+        <div>
+          <button id="calPrev" class="btn ghost" type="button">‹</button>
+          <button id="calNext" class="btn ghost" type="button">›</button>
+        </div>
+      </div>
+      <div id="calDow" class="cal-grid"></div>
+      <div id="calendar" class="cal-grid" aria-live="polite"></div>
+      <div id="calStatus" class="muted" style="margin-top:6px"></div>
+    </div>
+
+    <!-- Formulár – Formspree s honeypotom -->
+    <div class="card">
+      <form id="form" action="https://formspree.io/f/mzdajdgd" method="POST" novalidate>
+        <!-- HONEYPOT (skrytá pasca na robotov) -->
+        <input type="text" name="_gotcha" style="display:none" tabindex="-1" autocomplete="off" />
+
+        <!-- presmerovanie po odoslaní + predmet + voliteľná kópia -->
+        <input type="hidden" name="_redirect" value="/thank-you.html" />
+        <input type="hidden" name="_subject" value="Nový dopyt – Apartment Maestro Parada" />
+        <input type="hidden" name="_cc" value="{{email}}" />
+
+        <div class="grid">
+          <div>
+            <label for="name">Meno a priezvisko</label>
+            <input id="name" name="name" required placeholder="Jana Nováková" />
+          </div>
+          <div>
+            <label for="email">E‑mail</label>
+            <input id="email" name="email" type="email" required placeholder="jana@example.com" />
+          </div>
+        </div>
+
+        <div class="grid">
+          <div>
+            <label for="from">Príchod</label>
+            <input id="from" name="from" type="date" required />
+          </div>
+          <div>
+            <label for="to">Odchod</label>
+            <input id="to" name="to" type="date" required />
+          </div>
+        </div>
+
+        <div class="grid">
+          <div>
+            <label for="guests">Počet hostí</label>
+            <input id="guests" name="guests" type="number" min="1" max="8" value="2" required />
+          </div>
+          <div>
+            <label for="extrabeds">Prístelky</label>
+            <select id="extrabeds" name="extrabeds"><option>0</option><option>1</option><option>2</option></select>
+          </div>
+        </div>
+
+        <div>
+          <label for="note">Poznámka (nepovinné)</label>
+          <textarea id="note" name="note" placeholder="Prosím o detskú postieľku, neskorší check‑in…"></textarea>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:center;margin-top:8px">
+          <button type="submit" class="btn">Odoslať dopyt</button>
+          <span id="calcOut" class="muted"></span>
+        </div>
+
+        <div id="warnMsg" class="err" style="display:none"></div>
+      </form>
+    </div>
+  </div>
+
+<script>
+const CONFIG = {
+  minNights: 4,
+  cleaningFee: 100,
+  // DÁTA Z FUNKCIÍ (žiadne lokálne JSONy)
+  json_booked: '/.netlify/functions/get-data?kind=rezervacie',
+  json_prices: '/.netlify/functions/get-data?kind=cennik'
+};
+const $ = s => document.querySelector(s);
+
+// --- Kalendár: načítanie JSONov ---
+let PRICES = [], BOOKED = new Set();
+Promise.all([
+  fetch(CONFIG.json_booked).then(r => r.json()),
+  fetch(CONFIG.json_prices).then(r => r.json())
+]).then(([b, p]) => {
+  PRICES = p;
+  buildBookedSet(b);
+  initCal();
+}).catch(() => { initCal(); });
+
+function buildBookedSet(list){
+  const s = new Set();
+  (list || []).forEach(r => eachNight(r.from, r.to, d => s.add(d)));
+  BOOKED = s;
+}
+function toISO(d){
+  const t = new Date(d);
+  t.setHours(0,0,0,0);
+  const y=t.getFullYear(), m=('0'+(t.getMonth()+1)).slice(-2), dd=('0'+t.getDate()).slice(-2);
+  return `${y}-${m}-${dd}`;
+}
+function daysBetween(a,b){
+  const A=new Date(a), B=new Date(b);
+  A.setHours(0,0,0,0); B.setHours(0,0,0,0);
+  return Math.round((B-A)/(24*3600*1000));
+}
+function eachNight(from,to,fn){
+  const n=daysBetween(from,to);
+  const cur=new Date(from); cur.setHours(0,0,0,0);
+  for(let i=0;i<n;i++){ fn(toISO(cur)); cur.setDate(cur.getDate()+1); }
+}
+function inRange(d,r){ return d>=r.from && d<=r.to; }
+function priceForDate(d){ const p=PRICES.find(r=>inRange(d,r)); return p ? p.price : null; }
+function elecForDate(d){ const p=PRICES.find(r=>inRange(d,r)); return p ? !!p.electricity : false; }
+
+let CAL={y:(new Date()).getFullYear(), m:(new Date()).getMonth(), selFrom:null, selTo:null};
+
+function initCal(){
+  renderDow(); renderCal();
+  $('#calPrev').addEventListener('click', () => { CAL.m--; if(CAL.m<0){CAL.m=11; CAL.y--;} renderCal(); });
+  $('#calNext').addEventListener('click', () => { CAL.m++; if(CAL.m>11){CAL.m=0; CAL.y++;} renderCal(); });
+}
+function renderDow(){
+  const row = $('#calDow'); row.innerHTML = '';
+  ['Po','Ut','St','Št','Pi','So','Ne'].forEach(n => {
+    const d=document.createElement('div'); d.className='cal-dow'; d.textContent=n; row.appendChild(d);
+  });
+}
+function renderCal(){
+  const grid=$('#calendar'), title=$('#calTitle'); grid.innerHTML='';
+  const date=new Date(CAL.y, CAL.m, 1);
+  title.textContent=date.toLocaleString('sk-SK',{month:'long',year:'numeric'});
+  const firstPad=(date.getDay()+6)%7;
+  for(let i=0;i<firstPad;i++){
+    const e=document.createElement('div'); e.className='cal-cell disabled'; e.innerHTML='&nbsp;'; grid.appendChild(e);
+  }
+  const dim=new Date(CAL.y, CAL.m+1, 0).getDate();
+  const todayISO=toISO(new Date());
+  for(let d=1; d<=dim; d++){
+    const cell=document.createElement('div'); cell.className='cal-cell';
+    const iso=toISO(new Date(CAL.y, CAL.m, d)); cell.dataset.date=iso;
+    if(new Date(iso)<new Date(todayISO)) cell.classList.add('disabled');
+    if(BOOKED.has(iso)) cell.classList.add('booked');
+    if(!cell.classList.contains('disabled') && !cell.classList.contains('booked')) cell.classList.add('selectable');
+    const pr=priceForDate(iso); const ele=elecForDate(iso);
+    cell.innerHTML=`<div class='d-num'>${d}</div><div class='d-price'>${pr==null?'—':Math.round(pr)+' EUR'+(ele?' ⚡':'')}</div>`;
+    cell.addEventListener('click', onDayClick);
+    grid.appendChild(cell);
+  }
+}
+function onDayClick(e){
+  const iso=e.currentTarget.dataset.date;
+  if(e.currentTarget.classList.contains('disabled')||e.currentTarget.classList.contains('booked')) return;
+
+  if(!CAL.selFrom || (CAL.selFrom && CAL.selTo)){
+    CAL.selFrom=iso; CAL.selTo=null; highlight(); return;
+  } else {
+    const from=CAL.selFrom, to=iso;
+    const nights=daysBetween(from,to);
+    if(nights<=0) return warn('Odchod musí byť po príchode.');
+    if(nights<CONFIG.minNights) return warn(`Minimum ${CONFIG.minNights} nocí.`);
+    if(hasCollision(from,to)) return warn('Interval obsahuje obsadené dni.');
+    CAL.selTo=to;
+    const fi=document.getElementById('from'), ti=document.getElementById('to');
+    if(fi&&ti){ fi.value=from; ti.value=to; }
+    highlight(); calcAndShow();
+  }
+}
+function hasCollision(from,to){ let col=false; eachNight(from,to,d=>{ if(BOOKED.has(d)) col=true; }); return col; }
+function highlight(){
+  document.querySelectorAll('.cal-cell').forEach(c=>c.classList.remove('selected'));
+  if(CAL.selFrom && CAL.selTo)
+    eachNight(CAL.selFrom, CAL.selTo, d=>{
+      const el=document.querySelector(`.cal-cell[data-date='${d}']`);
+      if(el) el.classList.add('selected');
+    });
+}
+function calcAndShow(){
+  const fi=document.getElementById('from'), ti=document.getElementById('to'); if(!fi||!ti) return;
+  const from=fi.value, to=ti.value; const nights=daysBetween(from,to);
+  let sum=0, missing=false, ele=false;
+  eachNight(from,to,d=>{
+    const p=priceForDate(d);
+    if(p==null) missing=true; else sum+=p;
+    if(elecForDate(d)) ele=true;
+  });
+  const total=sum + (sum>0? CONFIG.cleaningFee:0);
+  const parts=[`Počet nocí: ${nights}`];
+  parts.push('· Odhad ceny: '+(missing?'—':(Math.round(total*100)/100)+' EUR (vrátane upratovania '+CONFIG.cleaningFee+' EUR)'));
+  if(ele) parts.push('· Elektrina sa účtuje samostatne podľa spotreby.');
+  const out=document.getElementById('calcOut'); if(out) out.textContent=parts.join(' ');
+}
+function warn(msg){
+  const w=document.getElementById('warnMsg'); if(!w) return;
+  w.textContent=msg; w.style.display='block';
+  setTimeout(()=>w.style.display='none',2200);
+}
+</script>
+</body>
+</html>
