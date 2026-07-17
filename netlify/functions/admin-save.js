@@ -40,10 +40,7 @@ export async function handler(event) {
   if (!Array.isArray(data)) return err(400, "data must be array");
 
   // Blobs store (manuálna konfigurácia)
-  const siteID = process.env.NETLIFY_SITE_ID;
-  const token  = process.env.NETLIFY_BLOBS_TOKEN;
-  const store  = getStore({ name: "kv", siteID, token });
-
+  const store = getStore({ name: "kv" });
   const key = kind === "cennik" ? "prices" : "booked";
 
   // ✨ kľúčová zmena – uložiť ako JSON
